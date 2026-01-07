@@ -24,28 +24,6 @@ print("--- ARCHIVOS GUARDADOS ---")
 archivos <- list.files(pattern = "\\.rds$")
 print(archivos)
 
-# 2. INTENTO DE RECUPERACIÓN INTELIGENTE
-# Vamos a ver cuál es el mejor archivo disponible
-
-if("Base_Final_Tesis_Definitiva.rds" %in% archivos) {
-  # ESCENARIO A: ¡El último código alcanzó a guardar antes de morir!
-  print("¡BUENAS NOTICIAS! Se alcanzó a guardar la base definitiva.")
-  df_recuperado <- readRDS("Base_Final_Tesis_Definitiva.rds")
-  print("Variables disponibles:")
-  print(names(df_recuperado))
-  print("Conteo de Clases:")
-  print(table(df_recuperado$CLASE))
-  
-} else if ("Base_Tesis_Lista.rds" %in% archivos) {
-  # ESCENARIO B: No se guardó la final, pero tenemos la intermedia
-  print("OK, tenemos la base intermedia. Verifiquemos si tiene las variables de vivienda (v1, v13, etc).")
-  df_recuperado <- readRDS("Base_Tesis_Lista.rds")
-  print(names(df_recuperado))
-  
-} else {
-  # ESCENARIO C: No hay archivos rds
-  print("No veo los archivos .rds. ¿Quizás quedaron en otra carpeta o con otro nombre?")
-}
 ```
 
 ```{r}
@@ -79,8 +57,8 @@ library(stringr)
 ```{r}
 library(stringr)
 
-# 1. Cargar la base de comunas (La nueva que bajaste)
-# Asegúrate de que el archivo esté en la carpeta de trabajo
+# 1. Cargar la base de comunas 
+
 base_geo <- read_sav("Base de datos provincia y comuna Casen 2022 SPSS.sav")
 # 2. Unir con la base principal (Hacemos el Match)
 # Usamos 'left_join' para pegar la info de comuna a cada persona de la casen
@@ -92,7 +70,7 @@ casen_completa <- left_join(casen, base_geo)
 # 3. Crear la "Llave Maestra" (Código CUT) para tus Mapas
 casen_lista <- casen_completa %>%
   mutate(
-    # Ahora la columna 'comuna' SÍ existe en tu base unida
+    # Ahora la columna 'comuna' SÍ existe en la base
     # La convertimos a texto y le agregamos el cero inicial si falta
     comuna_texto = as.character(as.numeric(comuna)),
     codigo_cruce = str_pad(comuna_texto, width = 5, side = "left", pad = "0")
@@ -112,8 +90,6 @@ install.packages("sf")
 library(sf)
 
 # --- PASO 1: CARGAR EL MAPA ---
-# Asegúrate de que R apunte a la carpeta donde descomprimiste los archivos
-# (No necesitas cargar el .prj o .xml aparte, R los lee solos)
 mapa_minvu <- st_read("CECYT_DEFICIT_HABIT_2023_WM.shp")
 ```
 ```{r}
@@ -144,12 +120,11 @@ mapa_comunal <- mapa_minvu %>%
 
 ```{r}
 # --- PASO 2: EL GRAN CRUCE (Unir CASEN + DATOS COMUNALES) ---
-# Asumo que tu base CASEN se llama 'casen_lista' y ya tiene la columna 'codigo_cruce'
+
 dataset_tesis <- left_join(casen_lista, mapa_comunal, by = "codigo_cruce")
 
 # --- PASO 3: VERIFICACIÓN FINAL ---
-print("¡Cruce realizado!")
-print("Mira las primeras filas con los datos nuevos:")
+print
 
 dataset_tesis %>%
   select(comuna, codigo_cruce, deficit_cuantitativo_total) %>%
@@ -157,7 +132,7 @@ dataset_tesis %>%
 ```
 
 ```{r}
-# Busca si existen estas columnas clave
+# Busqueda si existen estas columnas clave
 grep("calglob", names(dataset_tesis), value = TRUE) # Debería salir "calglobviv"
 grep("haci", names(dataset_tesis), value = TRUE)    # Debería salir "hacinamiento"
 grep("alle", names(dataset_tesis), value = TRUE)    # Debería salir "allegamiento"
@@ -173,7 +148,7 @@ print("Buscando variable de calidad...")
 print(grep("calidad", names(dataset_tesis), value = TRUE))
 print(grep("mat", names(dataset_tesis), value = TRUE))
 
-# 2. CREAR LA BASE FLACA (Con los nombres CORREGIDOS)
+# 2. CREAR LA BASE FLACA 
 df_modelo <- dataset_tesis %>%
   select(
     # --- Identificadores ---
@@ -222,7 +197,7 @@ grep("v1|v2|v3", names(df_modelo), value = TRUE)
 ```{r}
 
 
-# 1. Cargar la base (si no la tienes cargada)
+# 1. Cargar la base 
 # df_modelo <- readRDS("Base_Tesis_Lista.rds") 
 
 # 2. CREAR LA VARIABLE OBJETIVO (CLASE)
@@ -287,7 +262,7 @@ if(!"v1" %in% names(df_final_vivienda)) {
   print("Aviso: No se encontró 'v1', se rellenó con 0.")
 }
 
-# --- PASO 2: AHORA SÍ, EL CÓDIGO SIN ERRORES ---
+# --- PASO 2:  ---
 # Como ya aseguramos que las columnas existen, simplificamos la lógica.
 
 base_lista_para_ia <- df_final_vivienda %>%
