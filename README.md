@@ -15,6 +15,6 @@ El script realiza las siguientes operaciones de Ingeniería de Datos:
 El código genera una base de datos consolidada lista para el entrenamiento de modelos de Deep Learning (Perceptrón Multicapa).
 
 * **Entrada:** `Base_Final_Tesis_Definitiva.rds` (No incluido en este repo por tamaño).
-* **Lenguaje:** R 4.x
+
 * **Librerías:** tidyverse, dplyr, sf.
 
