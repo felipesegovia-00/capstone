@@ -1,0 +1,321 @@
+---
+title: "capstone"
+output: html_document
+date: "2026-01-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# 1. Instalar la librería (solo si no la tienes)
+install.packages("haven")
+install.packages("tidyverse")
+
+# 2. Activar las librerías
+library(haven)
+library(tidyverse)
+```
+
+```{r}
+library(tidyverse)
+
+# 1. Ver qué archivos .rds tenemos guardados en la carpeta
+print("--- ARCHIVOS GUARDADOS ---")
+archivos <- list.files(pattern = "\\.rds$")
+print(archivos)
+
+# 2. INTENTO DE RECUPERACIÓN INTELIGENTE
+# Vamos a ver cuál es el mejor archivo disponible
+
+if("Base_Final_Tesis_Definitiva.rds" %in% archivos) {
+  # ESCENARIO A: ¡El último código alcanzó a guardar antes de morir!
+  print("¡BUENAS NOTICIAS! Se alcanzó a guardar la base definitiva.")
+  df_recuperado <- readRDS("Base_Final_Tesis_Definitiva.rds")
+  print("Variables disponibles:")
+  print(names(df_recuperado))
+  print("Conteo de Clases:")
+  print(table(df_recuperado$CLASE))
+  
+} else if ("Base_Tesis_Lista.rds" %in% archivos) {
+  # ESCENARIO B: No se guardó la final, pero tenemos la intermedia
+  print("OK, tenemos la base intermedia. Verifiquemos si tiene las variables de vivienda (v1, v13, etc).")
+  df_recuperado <- readRDS("Base_Tesis_Lista.rds")
+  print(names(df_recuperado))
+  
+} else {
+  # ESCENARIO C: No hay archivos rds
+  print("No veo los archivos .rds. ¿Quizás quedaron en otra carpeta o con otro nombre?")
+}
+```
+
+```{r}
+df_final <- readRDS("Base_Final_Tesis_Definitiva.rds")
+```
+
+```{r}
+df_final %>%
+  group_by(CLASE) %>%
+  summarise(
+    Cantidad_Hogares = n(),
+    Porcentaje = n() / nrow(df_final) * 100,
+    Ingreso_Promedio = mean(yautcor, na.rm = TRUE),
+    Personas_Promedio = mean(tot_per_h, na.rm = TRUE)
+  )
+```
+
+
+
+
+```{r}
+
+
+casen <- read_sav("Base de datos Casen 2022 SPSS_18 marzo 2024.sav")
+
+# 4. ¡Miremos la columna!
+head(casen)
+```
+library(stringr)
+
+```{r}
+library(stringr)
+
+# 1. Cargar la base de comunas (La nueva que bajaste)
+# Asegúrate de que el archivo esté en la carpeta de trabajo
+base_geo <- read_sav("Base de datos provincia y comuna Casen 2022 SPSS.sav")
+# 2. Unir con la base principal (Hacemos el Match)
+# Usamos 'left_join' para pegar la info de comuna a cada persona de la casen
+# R detectará automáticamente las columnas en común ("folio" y "id_persona")
+casen_completa <- left_join(casen, base_geo)
+
+```
+```{r}
+# 3. Crear la "Llave Maestra" (Código CUT) para tus Mapas
+casen_lista <- casen_completa %>%
+  mutate(
+    # Ahora la columna 'comuna' SÍ existe en tu base unida
+    # La convertimos a texto y le agregamos el cero inicial si falta
+    comuna_texto = as.character(as.numeric(comuna)),
+    codigo_cruce = str_pad(comuna_texto, width = 5, side = "left", pad = "0")
+  )
+```
+
+```{r}
+head(casen_lista$codigo_cruce)
+
+```
+```{r}
+head(data.frame(Nombre=as_factor(casen_lista$comuna), Codigo=casen_lista$codigo_cruce))
+```
+
+```{r}
+install.packages("sf")
+library(sf)
+
+# --- PASO 1: CARGAR EL MAPA ---
+# Asegúrate de que R apunte a la carpeta donde descomprimiste los archivos
+# (No necesitas cargar el .prj o .xml aparte, R los lee solos)
+mapa_minvu <- st_read("CECYT_DEFICIT_HABIT_2023_WM.shp")
+```
+```{r}
+print(names(mapa_minvu))
+```
+
+```{r}
+# --- PASO 1: APLANAR EL MAPA (De Zonas a Comunas) ---
+mapa_comunal <- mapa_minvu %>%
+  st_drop_geometry() %>%   # Soltamos el dibujo para calcular rápido
+  group_by(COMUNA) %>%     # Agrupamos por el código de la comuna
+  summarise(
+    # Sumamos el déficit de todas las zonas de esa comuna
+    deficit_cuantitativo_total = sum(Déficit_C, na.rm = TRUE),
+    
+    # También podemos sumar el déficit cualitativo si lo necesitas (parece ser Déficit_1)
+    # deficit_cualitativo_total = sum(Déficit_1, na.rm = TRUE),
+    
+    # Mantenemos el nombre de la región para verificar
+    nombre_region = first(NOM_REGION) 
+  ) %>%
+  mutate(
+    # CREAMOS LA LLAVE MAESTRA (5 dígitos con cero a la izquierda)
+    # Esto es vital para que pegue con la CASEN
+    codigo_cruce = str_pad(as.character(COMUNA), width = 5, side = "left", pad = "0")
+  )
+```
+
+```{r}
+# --- PASO 2: EL GRAN CRUCE (Unir CASEN + DATOS COMUNALES) ---
+# Asumo que tu base CASEN se llama 'casen_lista' y ya tiene la columna 'codigo_cruce'
+dataset_tesis <- left_join(casen_lista, mapa_comunal, by = "codigo_cruce")
+
+# --- PASO 3: VERIFICACIÓN FINAL ---
+print("¡Cruce realizado!")
+print("Mira las primeras filas con los datos nuevos:")
+
+dataset_tesis %>%
+  select(comuna, codigo_cruce, deficit_cuantitativo_total) %>%
+  head(10)
+```
+
+```{r}
+# Busca si existen estas columnas clave
+grep("calglob", names(dataset_tesis), value = TRUE) # Debería salir "calglobviv"
+grep("haci", names(dataset_tesis), value = TRUE)    # Debería salir "hacinamiento"
+grep("alle", names(dataset_tesis), value = TRUE)    # Debería salir "allegamiento"
+```
+
+
+```{r}
+library(tidyverse)
+
+# 1. BUSCAR LA VARIABLE PERDIDA (Calidad)
+# Probemos buscando "calidad" o "materialidad" para encontrarla.
+print("Buscando variable de calidad...")
+print(grep("calidad", names(dataset_tesis), value = TRUE))
+print(grep("mat", names(dataset_tesis), value = TRUE))
+
+# 2. CREAR LA BASE FLACA (Con los nombres CORREGIDOS)
+df_modelo <- dataset_tesis %>%
+  select(
+    # --- Identificadores ---
+    folio, id_persona, comuna, region, codigo_cruce, expr,
+    
+    # --- Variables de la Familia ---
+    tot_per_h,      # Personas
+    yautcor,        # Ingreso (Si te da error, prueba 'yaut')
+    esc,            # Escolaridad
+    edad, 
+    sexo,
+    
+    # --- Contexto (Mapa MINVU) ---
+    deficit_cuantitativo_total, 
+    
+    # --- Variables Objetivo (CORREGIDAS) ---
+    ind_hacina,     # Hacinamiento (Nombre real encontrado)
+    allega_ext,     # Allegamiento Externo (Nombre real encontrado)
+    allega_int      # Allegamiento Interno (Nombre real encontrado)
+    
+    # Nota: Dejamos fuera 'calidad' por ahora hasta saber su nombre real
+  )
+
+# 3. GUARDADO INSTANTÁNEO (Formato RDS)
+saveRDS(df_modelo, "Base_Tesis_Lista.rds")
+print("¡Listo! Base guardada como 'Base_Tesis_Lista.rds'.")
+
+# 4. VERIFICACIÓN
+head(df_modelo)
+```
+
+```{r}
+# Ver qué números traen las variables para saber cuál es "Malo" y cuál es "Bueno"
+print("--- Hacinamiento ---")
+table(df_modelo$ind_hacina) 
+
+print("--- Allegamiento Externo ---")
+table(df_modelo$allega_ext)
+
+print("--- Materialidad (Paredes/Piso/Techo) ---")
+# Si no te salen v1, v2, v3 antes, probemos si existen estas:
+grep("v1|v2|v3", names(df_modelo), value = TRUE)
+```
+
+
+```{r}
+
+
+# 1. Cargar la base (si no la tienes cargada)
+# df_modelo <- readRDS("Base_Tesis_Lista.rds") 
+
+# 2. CREAR LA VARIABLE OBJETIVO (CLASE)
+# Filtramos los errores (-88) y creamos las categorías
+base_final_modelo <- df_modelo %>%
+  filter(ind_hacina != -88) %>%  # Sacamos los datos sucios
+  mutate(
+    # --- LOGICA DE CLASIFICACIÓN ---
+    CLASE = case_when(
+      # CLASE 2: DÉFICIT CUANTITATIVO (Grave)
+      # Si tiene hacinamiento (2,3,4) O es allegado (1)
+      ind_hacina >= 2 | allega_ext == 1 ~ 2,
+      
+      # CLASE 0: SIN DÉFICIT (Sano)
+      # Si no tiene hacinamiento (1) Y no es allegado (0)
+      ind_hacina == 1 & allega_ext == 0 ~ 0,
+      
+      # Cualquier otro caso raro
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  na.omit() # Borramos cualquier fila incompleta final
+
+# 3. VERIFICAR CÓMO QUEDÓ EL BALANCE
+print("¡Distribución de tus Clases para la Tesis!")
+print("0 = Sin Déficit | 2 = Déficit Cuantitativo")
+table(base_final_modelo$CLASE)
+
+# 4. GUARDAR LA BASE DE ORO FINAL
+saveRDS(base_final_modelo, "Base_Para_Entrenar_Red_Neuronal.rds")
+write.csv(base_final_modelo, "Base_Para_Entrenar_Red_Neuronal.csv", row.names = FALSE)
+```
+```{r}
+library(ggplot2)
+
+# Un gráfico de barras simple y elegante
+ggplot(base_final_modelo, aes(x = as.factor(CLASE), fill = as.factor(CLASE))) +
+  geom_bar() +
+  scale_x_discrete(labels = c("0" = "Sin Déficit", "2" = "Con Déficit")) +
+  labs(title = "Distribución de la Variable Objetivo",
+       subtitle = paste("Total Hogares:", nrow(base_final_modelo)),
+       x = "Situación Habitacional",
+       y = "Cantidad de Familias",
+       fill = "Clase") +
+  theme_minimal()
+```
+```{r}
+
+library(tidyverse)
+
+# --- PASO 1: PARCHE DE SEGURIDAD ---
+# Si las columnas no existen, las creamos con ceros para que el código no falle.
+# (Esto es como ponerle ruedas de entrenamiento al código)
+
+if(!"ind_cal_glob" %in% names(df_final_vivienda)) {
+  df_final_vivienda$ind_cal_glob <- 0
+  print("Aviso: No se encontró 'ind_cal_glob', se rellenó con 0.")
+}
+
+if(!"v1" %in% names(df_final_vivienda)) {
+  df_final_vivienda$v1 <- 0
+  print("Aviso: No se encontró 'v1', se rellenó con 0.")
+}
+
+# --- PASO 2: AHORA SÍ, EL CÓDIGO SIN ERRORES ---
+# Como ya aseguramos que las columnas existen, simplificamos la lógica.
+
+base_lista_para_ia <- df_final_vivienda %>%
+  mutate(
+    # Lógica simplificada (ya no dará error)
+    es_irrecuperable = case_when(
+      ind_cal_glob == 3 ~ 1,       # Si el índice dice Irrecuperable -> 1
+      v1 %in% c(7, 10) ~ 1,        # Si es Choza/Precario -> 1
+      TRUE ~ 0                     # Todo el resto -> 0
+    ),
+    
+    # --- VARIABLE OBJETIVO FINAL ---
+    CLASE = case_when(
+      # CLASE 2: DÉFICIT CUANTITATIVO + IRRECUPERABLE
+      ind_hacina >= 2 | allega_ext == 1 | es_irrecuperable == 1 ~ 2,
+      
+      # CLASE 0: SIN DÉFICIT
+      TRUE ~ 0
+    )
+  ) %>%
+  # Limpiamos variables auxiliares
+  select(-matches("v1|ind_cal|es_irrecuperable"))
+
+# --- PASO 3: EL VEREDICTO ---
+print("--- DISTRIBUCIÓN FINAL DE CLASES ---")
+table(base_lista_para_ia$CLASE)
+
+# --- PASO 4: GUARDADO FINAL ---
+saveRDS(base_lista_para_ia, "Base_Final_Tesis_Definitiva.rds")
+```
+
