@@ -1,6 +1,5 @@
 ---
----
-title: "Informe Técnico: Entrenamiento de Red Neuronal para Predicción de Déficit Habitacional"
+title: "Informe Técnico: Red Neuronal Déficit Habitacional"
 author: "Felipe Segovia y Tomás Urrutia"
 date: "`r Sys.Date()`"
 output: 
@@ -8,12 +7,14 @@ output:
     toc: true
     toc_float: true
     theme: flatly
+    highlight: tango
 ---
 
 ```{r setup, include=FALSE}
-# Configuración global: Ocultar mensajes técnicos irrelevantes en el reporte fina
+# Configuración global
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
----
+
+
 ```
 
 ## 1. Introducción y Carga de Datos
@@ -25,9 +26,10 @@ Se aplica un filtro metodológico crítico para establecer la **unidad de análi
 ```{r carga_datos, echo=TRUE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(caret)
+library(haven) # IMPORTANTE: Para manejar las etiquetas de la CASEN
 
 # 1. Carga de la base maestra
-# Se verifica la existencia del archivo para evitar errores
+# Verificamos si existe el archivo para evitar errores
 if(file.exists("Base_Final_Tesis_Definitiva.rds")) {
   df_completo <- readRDS("Base_Final_Tesis_Definitiva.rds")
 } else {
@@ -36,14 +38,13 @@ if(file.exists("Base_Final_Tesis_Definitiva.rds")) {
 
 # 2. CORRECCIÓN MUESTRAL: INDEPENDENCIA DE OBSERVACIONES
 # Se filtra la base para conservar un solo registro por Hogar (Folio),
-# eliminando la duplicidad generada por los múltiples integrantes de la familia.
+# eliminando la duplicidad generada por los múltiples integrantes.
 df_hogares <- df_completo %>%
   distinct(folio, .keep_all = TRUE)
 
 # 3. Reporte de reducción muestral
 print(paste("Muestra inicial (Individuos):", nrow(df_completo)))
 print(paste("Muestra ajustada (Hogares únicos):", nrow(df_hogares)))
-
 
 ```
 
@@ -57,8 +58,13 @@ Se seleccionan las variables predictoras basándose en la literatura económica 
 * **Predictores:** Ingreso, Escolaridad, Tamaño del Hogar, Déficit Comunal (MINVU) y Hacinamiento.
 
 ```{r preparacion_datos}
-# Selección y limpieza de variables
-datos_modelo <- df_hogares %>%
+# LIMPIEZA DE ETIQUETAS 
+# Convertimos todas las variables 'haven_labelled' a números puros
+df_hogares_clean <- df_hogares %>%
+  haven::zap_labels()
+
+# Selección y transformación de variables
+datos_modelo <- df_hogares_clean %>%
   select(
     CLASE,                      
     yautcor,                    # Ingreso Autónomo
@@ -70,7 +76,7 @@ datos_modelo <- df_hogares %>%
     ind_hacina                  # Índice de Hacinamiento
   ) %>%
   mutate(
-    # Caret requiere que las clases sean factores con nombres válidos
+    # Ahora sí podemos convertir sin errores
     CLASE = factor(ifelse(CLASE == 2, "DEFICIT", "SANO")),
     sexo = as.numeric(sexo)
   ) %>%
@@ -91,23 +97,23 @@ Se implementa un **Perceptrón Multicapa (MLP)** utilizando la librería `caret`
 3.  **Preprocesamiento:** Centrado y escalado (Z-score) de todas las variables numéricas.
 
 ```{r entrenamiento}
-# Separación Train/Test (70% Entrenamiento - 30% Prueba)
+# Separación Train/Test (70% - 30%)
 set.seed(123) 
 indice_train <- createDataPartition(datos_modelo$CLASE, p = 0.7, list = FALSE)
 train_data <- datos_modelo[indice_train, ]
 test_data  <- datos_modelo[-indice_train, ]
 
-# Configuración de control del entrenamiento
+# Configuración de control
 control_entrenamiento <- trainControl(
   method = "cv",        
   number = 5,           
   classProbs = TRUE,    
-  summaryFunction = twoClassSummary, # Optimización de curva ROC
-  sampling = "up",      # Técnica de balanceo de clases
+  summaryFunction = twoClassSummary, # Optimizar ROC
+  sampling = "up",      # Balanceo de clases
   verboseIter = FALSE   
 )
 
-# Entrenamiento de la Red Neuronal (nnet)
+# Entrenamiento (nnet)
 modelo_nn <- train(
   CLASE ~ .,                
   data = train_data,
@@ -115,11 +121,11 @@ modelo_nn <- train(
   trControl = control_entrenamiento,
   preProcess = c("center", "scale"), 
   trace = FALSE,            
-  tuneLength = 5,           # Búsqueda de hiperparámetros (Grid Search)
+  tuneLength = 5,           
   metric = "ROC"            
 )
 
-# Mostrar resultados del ajuste de hiperparámetros
+# Resultados del entrenamiento
 print(modelo_nn)
 plot(modelo_nn)
 ```
@@ -132,10 +138,10 @@ Se evalúa el modelo con el conjunto de prueba (Test Set, 30%) que no fue visto 
 Permite visualizar la capacidad del modelo para distinguir Verdaderos Positivos (Déficit real) y calcular métricas como Sensibilidad y Especificidad.
 
 ```{r evaluacion}
-# Predicciones sobre datos nuevos
+# Predicciones
 predicciones_raw <- predict(modelo_nn, test_data)
 
-# Generación de métricas
+# Métricas detalladas
 conf_matrix <- confusionMatrix(predicciones_raw, test_data$CLASE, mode = "everything")
 print(conf_matrix)
 ```
