@@ -1,0 +1,198 @@
+---
+title: "RED.NEURONAL"
+output: html_document
+date: "2026-01-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+print("--- PASO 1: RECUPERANDO DATOS ---")
+
+# 1. Cargar la base GRANDE (Esta sí o sí la tienes)
+# Si falla aquí, avísame, pero debería estar en tu carpeta.
+df_completo <- readRDS("Base_Final_Tesis_Definitiva.rds")
+
+# 2. APLICAR EL FILTRO DE HOGARES (Lo que hicimos recién)
+print("Filtrando para dejar un solo registro por hogar...")
+df <- df_completo %>%
+  distinct(folio, .keep_all = TRUE) # Dejar solo 1 fila por folio
+
+print(paste("Base lista con", nrow(df), "hogares únicos."))
+
+
+print("--- PASO 2: PREPARANDO EL MODELO ---")
+
+# 3. SELECCIÓN DE VARIABLES
+# Seleccionamos las columnas para la Inteligencia Artificial
+datos_modelo <- df %>%
+  select(
+    CLASE,                      # Target (0 o 2)
+    yautcor,                    # Ingreso
+    tot_per_h,                  # Tamaño Hogar
+    esc,                        # Escolaridad
+    edad,                       # Edad Jefe
+    sexo,                       # Sexo
+    deficit_cuantitativo_total, # Dato MINVU
+    ind_hacina                  # Dato Hacinamiento
+  ) %>%
+  mutate(
+    # Convertir la CLASE en palabras ("Sano", "Deficit") para que caret no reclame
+    CLASE = factor(ifelse(CLASE == 2, "Deficit", "Sano")),
+    sexo = as.numeric(sexo)
+  ) %>%
+  na.omit() # Borrar nulos
+
+print(paste("Datos finales para entrenamiento:", nrow(datos_modelo)))
+print(table(datos_modelo$CLASE))
+
+
+print("--- PASO 3: ENTRENANDO RED NEURONAL (ESPERA UNOS MINUTOS...) ---")
+
+# 4. CONFIGURACIÓN DEL ENTRENAMIENTO
+# Usamos validación cruzada y balanceo de clases (up-sampling)
+set.seed(123)
+control_entrenamiento <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,            # Calcular probabilidades
+  summaryFunction = twoClassSummary, # Métricas detalladas
+  sampling = "up",              # IMPORTANTE: Balancear clases (repetir casos de déficit)
+  verboseIter = TRUE            # Mostrar progreso
+)
+
+# 5. EL MODELO (Neural Network)
+modelo_nn <- train(
+  CLASE ~ .,
+  data = datos_modelo,
+  method = "nnet",      # Red Neuronal Simple (1 capa oculta)
+  preProcess = c("center", "scale"), # Normalizar variables
+  trControl = control_entrenamiento,
+  trace = FALSE,        # No llenar la pantalla de texto
+  tuneLength = 3,       # Probar 3 tamaños distintos de red
+  metric = "ROC"        # Optimizar para distinguir bien
+)
+
+print("--- ¡ENTRENAMIENTO FINALIZADO! ---")
+print(modelo_nn)
+
+# 6. GRÁFICO DE RESULTADOS
+plot(modelo_nn)
+
+
+```
+```{r}
+# --- SCRIPT: ENTRENAMIENTO DE LA RED NEURONAL ---
+
+library(tidyverse)
+library(caret)  # La navaja suiza del Machine Learning
+
+# 1. CARGAR Y PREPARAR DATOS (A prueba de fallos)
+# Si no tienes el archivo chico, cargamos el grande y filtramos al vuelo
+if(file.exists("Base_Entrenamiento_Hogares_Unicos.rds")) {
+  df <- readRDS("Base_Entrenamiento_Hogares_Unicos.rds")
+} else {
+  print("Generando base de hogares al vuelo...")
+  df <- readRDS("Base_Final_Tesis_Definitiva.rds") %>% 
+    distinct(folio, .keep_all = TRUE)
+}
+
+# 2. SELECCIÓN DE VARIABLES (INPUTS)
+# Vamos a elegir solo lo que el modelo va a "ver".
+datos_modelo <- df %>%
+  select(
+    # Variable Objetivo
+    CLASE,
+    
+    # Variables Predictoras (Familia)
+    yautcor,          # Ingreso (La clave económica)
+    tot_per_h,        # Tamaño del hogar
+    esc,              # Escolaridad del Jefe
+    edad,             # Edad del Jefe
+    sexo,             # Sexo del Jefe
+    
+    # Variables Territoriales (Contexto MINVU)
+    deficit_cuantitativo_total, 
+    ind_hacina        
+  ) %>%
+  mutate(
+    # Caret necesita que la Clase sea texto (ej: "Déficit", "NoDéficit")
+    CLASE = factor(ifelse(CLASE == 2, "DEFICIT", "SANO")),
+    sexo = as.numeric(sexo)
+  ) %>%
+  na.omit() # Borrar datos vacíos
+
+print(paste("Datos listos para entrenar:", nrow(datos_modelo)))
+
+# 3. DIVISIÓN DEL DATASET (Train vs Test)
+set.seed(123) 
+indice_train <- createDataPartition(datos_modelo$CLASE, p = 0.7, list = FALSE)
+train_data <- datos_modelo[indice_train, ]
+test_data  <- datos_modelo[-indice_train, ]
+
+# 4. CONFIGURACIÓN MAESTRA DEL ENTRENAMIENTO
+control_entrenamiento <- trainControl(
+  method = "cv",        # Validación Cruzada (5 veces)
+  number = 5,           
+  classProbs = TRUE,    # Queremos probabilidades %
+  summaryFunction = twoClassSummary, # Medir Curva ROC
+  sampling = "up",      # <--- CLAVE: Balancear artificialmente la muestra
+  verboseIter = TRUE    # Ver el progreso en pantalla
+)
+
+# 5. ENTRENAR LA RED NEURONAL
+print("--- INICIANDO ENTRENAMIENTO (Puede tardar 2-3 minutos) ---")
+
+modelo_nn <- train(
+  CLASE ~ .,                
+  data = train_data,
+  method = "nnet",          # Red Neuronal clásica
+  trControl = control_entrenamiento,
+  preProcess = c("center", "scale"), # Normalizar datos (Obligatorio en Deep Learning)
+  trace = FALSE,            
+  tuneLength = 5,           # Probar 5 tamaños distintos de red
+  metric = "ROC"            # Optimizar el área bajo la curva
+)
+
+# 6. VER RESULTADOS
+print("--- RESULTADOS DEL ENTRENAMIENTO ---")
+print(modelo_nn)
+plot(modelo_nn)
+```
+```{r}
+# --- SCRIPT 4: VALIDACIÓN FINAL Y MATRIZ DE CONFUSIÓN ---
+
+print("--- EVALUANDO EL MODELO CON DATOS DESCONOCIDOS (TEST SET) ---")
+
+# 1. Hacer predicciones sobre el 30% que el modelo NUNCA vio
+predicciones_raw <- predict(modelo_nn, test_data)
+
+# 2. Generar la Matriz de Confusión
+# Esto compara lo que dijo el modelo vs. La realidad
+conf_matrix <- confusionMatrix(predicciones_raw, test_data$CLASE, mode = "everything")
+
+print(conf_matrix)
+
+# 3. EXTRAER LAS IMPORTANCIAS (¿Qué variable pesó más?)
+# Esto responde a la crítica de la "Caja Negra"
+importancia <- varImp(modelo_nn)
+print("--- IMPORTANCIA DE LAS VARIABLES ---")
+print(importancia)
+plot(importancia, main = "Variables que más predicen el Déficit")
+```
+```{r}
+# --- SCRIPT FINAL: LA EXPLICACIÓN ECONÓMICA ---
+
+# Calcular la importancia de cada variable
+importancia <- varImp(modelo_nn)
+
+# Mostrar la tabla en consola
+print(importancia)
+
+# Generar el gráfico para tu PPT
+plot(importancia, main = "Variables Determinantes del Déficit Habitacional")
+```
+
