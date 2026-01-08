@@ -1,0 +1,142 @@
+---
+---
+title: "Informe Técnico: Entrenamiento de Red Neuronal para Predicción de Déficit Habitacional"
+author: "Felipe Segovia y Tomás Urrutia"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+# Configuración global: Ocultar mensajes técnicos irrelevantes en el reporte fina
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+---
+```
+
+## 1. Introducción y Carga de Datos
+
+En esta sección se procede a la carga de la base de datos consolidada, la cual integra información socioeconómica (CASEN 2022) con indicadores territoriales del MINVU.
+
+Se aplica un filtro metodológico crítico para establecer la **unidad de análisis correcta**, asegurando la independencia de las observaciones.
+
+```{r carga_datos, echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(caret)
+
+# 1. Carga de la base maestra
+# Se verifica la existencia del archivo para evitar errores
+if(file.exists("Base_Final_Tesis_Definitiva.rds")) {
+  df_completo <- readRDS("Base_Final_Tesis_Definitiva.rds")
+} else {
+  stop("Error: No se encuentra el archivo 'Base_Final_Tesis_Definitiva.rds'.")
+}
+
+# 2. CORRECCIÓN MUESTRAL: INDEPENDENCIA DE OBSERVACIONES
+# Se filtra la base para conservar un solo registro por Hogar (Folio),
+# eliminando la duplicidad generada por los múltiples integrantes de la familia.
+df_hogares <- df_completo %>%
+  distinct(folio, .keep_all = TRUE)
+
+# 3. Reporte de reducción muestral
+print(paste("Muestra inicial (Individuos):", nrow(df_completo)))
+print(paste("Muestra ajustada (Hogares únicos):", nrow(df_hogares)))
+
+
+```
+
+
+
+## 2. Selección de Variables
+
+Se seleccionan las variables predictoras basándose en la literatura económica y se normalizan los datos para el correcto funcionamiento del algoritmo de Deep Learning.
+
+* **Target:** `CLASE` (0 = Sin Déficit, 2 = Déficit Crítico).
+* **Predictores:** Ingreso, Escolaridad, Tamaño del Hogar, Déficit Comunal (MINVU) y Hacinamiento.
+
+```{r preparacion_datos}
+# Selección y limpieza de variables
+datos_modelo <- df_hogares %>%
+  select(
+    CLASE,                      
+    yautcor,                    # Ingreso Autónomo
+    tot_per_h,                  # Tamaño del Hogar
+    esc,                        # Escolaridad del Jefe
+    edad,                       # Edad
+    sexo,                       # Sexo
+    deficit_cuantitativo_total, # Variable Contextual (MINVU)
+    ind_hacina                  # Índice de Hacinamiento
+  ) %>%
+  mutate(
+    # Caret requiere que las clases sean factores con nombres válidos
+    CLASE = factor(ifelse(CLASE == 2, "DEFICIT", "SANO")),
+    sexo = as.numeric(sexo)
+  ) %>%
+  na.omit() # Eliminación de casos incompletos
+
+# Visualización de la distribución de clases
+print("Distribución de clases (Antes del balanceo):")
+table(datos_modelo$CLASE)
+```
+
+## 3. Entrenamiento del Modelo (Red Neuronal)
+
+Se implementa un **Perceptrón Multicapa (MLP)** utilizando la librería `caret`.
+
+### Metodología de Entrenamiento:
+1.  **Validación Cruzada (k-fold CV):** $k=5$ para asegurar robustez estadística.
+2.  **Balanceo de Clases (Up-Sampling):** Dado el desbalance natural del déficit habitacional, se aplica sobremuestreo a la clase minoritaria ("DEFICIT") durante el entrenamiento. Esto permite que el modelo aprenda a detectar casos críticos con mayor sensibilidad.
+3.  **Preprocesamiento:** Centrado y escalado (Z-score) de todas las variables numéricas.
+
+```{r entrenamiento}
+# Separación Train/Test (70% Entrenamiento - 30% Prueba)
+set.seed(123) 
+indice_train <- createDataPartition(datos_modelo$CLASE, p = 0.7, list = FALSE)
+train_data <- datos_modelo[indice_train, ]
+test_data  <- datos_modelo[-indice_train, ]
+
+# Configuración de control del entrenamiento
+control_entrenamiento <- trainControl(
+  method = "cv",        
+  number = 5,           
+  classProbs = TRUE,    
+  summaryFunction = twoClassSummary, # Optimización de curva ROC
+  sampling = "up",      # Técnica de balanceo de clases
+  verboseIter = FALSE   
+)
+
+# Entrenamiento de la Red Neuronal (nnet)
+modelo_nn <- train(
+  CLASE ~ .,                
+  data = train_data,
+  method = "nnet",          
+  trControl = control_entrenamiento,
+  preProcess = c("center", "scale"), 
+  trace = FALSE,            
+  tuneLength = 5,           # Búsqueda de hiperparámetros (Grid Search)
+  metric = "ROC"            
+)
+
+# Mostrar resultados del ajuste de hiperparámetros
+print(modelo_nn)
+plot(modelo_nn)
+```
+
+## 4. Evaluación de Desempeño
+
+Se evalúa el modelo con el conjunto de prueba (Test Set, 30%) que no fue visto durante el entrenamiento para garantizar una evaluación honesta.
+
+### 4.1. Matriz de Confusión
+Permite visualizar la capacidad del modelo para distinguir Verdaderos Positivos (Déficit real) y calcular métricas como Sensibilidad y Especificidad.
+
+```{r evaluacion}
+# Predicciones sobre datos nuevos
+predicciones_raw <- predict(modelo_nn, test_data)
+
+# Generación de métricas
+conf_matrix <- confusionMatrix(predicciones_raw, test_data$CLASE, mode = "everything")
+print(conf_matrix)
+```
+
