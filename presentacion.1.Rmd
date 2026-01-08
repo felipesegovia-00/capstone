@@ -1,0 +1,135 @@
+---
+---
+title: "Modelo Predictivo de Déficit Habitacional: Enfoque de Redes Neuronales"
+author: "Felipe Segovia y Tomás Urrutia"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+# Configuración global: Ocultamos mensajes de carga para un reporte limpio
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## 1. Integración (Data Merging)
+
+Nuestro objetivo fue enriquecer la caracterización socioeconómica (CASEN) con la realidad territorial (MINVU).
+
+**Problema Técnico:** La CASEN y el Censo/MINVU usan formatos distintos para los códigos comunales (números vs. texto), lo que impide un cruce directo.
+
+**Solución:** Estandarización mediante el Código Único Territorial (CUT).
+
+```{r integracion_datos, eval=FALSE}
+# NOTA: Este bloque demuestra la metodología de integración utilizada.
+# Se deja como referencia (eval=FALSE) para mostrar el código original de limpieza.
+
+library(tidyverse)
+library(stringr) # Para estandarización de texto
+library(sf)      # Para manejo de datos espaciales (Mapas)
+
+# 1. Carga de fuentes originales
+# casen_raw <- read_sav("Base de datos Casen 2022 SPSS.sav")
+# mapa_minvu <- st_read("CECYT_DEFICIT_HABIT_2023_WM.shp")
+
+# 2. Ingeniería de Datos: Estandarización de Llave Maestra (CUT)
+# Convertimos el código comunal a texto de 5 dígitos (ej: "13101") en ambas bases.
+# Esto soluciona el problema de incompatibilidad de formatos.
+casen_prep <- casen_raw %>%
+  mutate(
+    codigo_cruce = str_pad(as.character(comuna), width = 5, side = "left", pad = "0")
+  )
+
+mapa_prep <- mapa_minvu %>%
+  st_drop_geometry() %>% # Convertimos el mapa a tabla de datos
+  mutate(
+    codigo_cruce = str_pad(as.character(COMUNA), width = 5, side = "left", pad = "0")
+  )
+
+# 3. El Cruce (Merge)
+# Unimos los indicadores territoriales a cada hogar mediante la llave estandarizada.
+dataset_integrado <- left_join(casen_prep, mapa_prep, by = "codigo_cruce")
+```
+
+
+## 2. Construcción de la Variable Objetivo (Target)
+
+Definimos el **Déficit Habitacional** siguiendo los estándares del Ministerio.
+
+**Criterios de Clasificación:**
+* **Clase 2 (Déficit):** Hogares con Hacinamiento, Allegamiento o Vivienda Irrecuperable.
+* **Clase 0 (Sano):** Hogares sin estas carencias.
+
+```{r definicion_variables}
+library(tidyverse)
+
+# Carga de la base (simulación)
+if(file.exists("Base_Final_Tesis_Definitiva.rds")) {
+  df_raw <- readRDS("Base_Final_Tesis_Definitiva.rds")
+} else {
+  stop("Base de datos no encontrada.")
+}
+
+# OPERACIONALIZACIÓN DE LA VARIABLE DEPENDIENTE
+# Traducimos los criterios normativos del MINVU a lógica de código:
+df_etiquetado <- df_raw %>%
+  mutate(
+    # Creación de la variable a predecir
+    CLASE = case_when(
+      ind_hacina >= 2 ~ 2,        # Criterio 1: Hacinamiento Medio/Crítico
+      allega_ext == 1 ~ 2,        # Criterio 2: Allegamiento Externo
+      ind_mat == 3 ~ 2,           # Criterio 3: Materialidad Irrecuperable
+      TRUE ~ 0                    # Resto: Hogares sin déficit cuantitativo
+    )
+  )
+
+print("Distribución de Clases Generada:")
+table(df_etiquetado$CLASE)
+```
+
+
+## 3. Definición de la Unidad de Análisis y Selección Final
+
+La encuesta CASEN es una base de datos a nivel de individuos. Sin embargo, el déficit habitacional es un atributo del **Hogar**, no de la persona.
+
+Incluir a todos los integrantes (ej: padre, madre, hijos) duplicaría la información y generaría **autocorrelación**, sesgando el modelo. Por ello, aplicamos un filtro para mantener un solo registro representativo por folio.
+
+```{r }
+# 1. FILTRO DE UNIDAD DE ANÁLISIS
+# Seleccionamos un solo representante por hogar (Jefe de Hogar) para evitar duplicidad.
+df_hogares <- df_etiquetado %>%
+  distinct(folio, .keep_all = TRUE)
+
+# 2. SELECCIÓN DE PREDICTORES (Feature Selection)
+# Conservamos solo las variables teóricamente relevantes para el modelamiento.
+df_final_modelo <- df_hogares %>%
+  select(
+    folio,
+    CLASE,                      # Variable Dependiente (Target)
+    yautcor,                    # Ingreso Autónomo
+    tot_per_h,                  # Tamaño del Hogar
+    esc,                        # Escolaridad
+    edad,                       # Edad
+    sexo,                       # Sexo
+    deficit_cuantitativo_total, # Variable Territorial (MINVU)
+    ind_hacina                  # Variable Habitacional (Control)
+  ) %>%
+  na.omit() # Eliminamos registros incompletos para asegurar calidad de datos
+
+# 3. EXPORTACIÓN DEL DATASET CONSOLIDADO
+# Guardamos este archivo limpio. Este será el "Input" para el script de la Red Neuronal.
+# saveRDS(df_final_modelo, "Input_Para_Red_Neuronal.rds")
+
+# Reporte Final
+print(paste("Muestra original (Individuos):", nrow(df_etiquetado)))
+print(paste("Muestra final para modelo (Hogares):", nrow(df_final_modelo)))
+head(df_final_modelo)
+```
+
+
+
+`
