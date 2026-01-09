@@ -11,7 +11,7 @@
 
 <meta name="author" content="Felipe Segovia y Tomás Urrutia" />
 
-<meta name="date" content="2026-01-08" />
+<meta name="date" content="2026-01-09" />
 
 <title>Modelo Predictivo de Déficit Habitacional: Enfoque de Redes Neuronales</title>
 
@@ -1572,135 +1572,298 @@ border-radius: 0px;
 <h1 class="title toc-ignore">Modelo Predictivo de Déficit Habitacional:
 Enfoque de Redes Neuronales</h1>
 <h4 class="author">Felipe Segovia y Tomás Urrutia</h4>
-<h4 class="date">2026-01-08</h4>
+<h4 class="date">2026-01-09</h4>
 
 </div>
 
 
-<div id="integración-data-merging" class="section level2">
-<h2>1. Integración (Data Merging)</h2>
-<p>Nuestro objetivo fue enriquecer la caracterización socioeconómica
-(CASEN) con la realidad territorial (MINVU).</p>
-<p><strong>Problema Técnico:</strong> La CASEN y el Censo/MINVU usan
-formatos distintos para los códigos comunales (números vs. texto), lo
-que impide un cruce directo.</p>
-<p><strong>Solución:</strong> Estandarización mediante el Código Único
-Territorial (CUT).</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># NOTA: Este bloque demuestra la metodología de integración utilizada.</span></span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="co"># Se deja como referencia (eval=FALSE) para mostrar el código original de limpieza.</span></span>
-<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
-<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="fu">library</span>(stringr) <span class="co"># Para estandarización de texto</span></span>
-<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="fu">library</span>(sf)      <span class="co"># Para manejo de datos espaciales (Mapas)</span></span>
-<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co"># 1. Carga de fuentes originales</span></span>
-<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co"># casen_raw &lt;- read_sav(&quot;Base de datos Casen 2022 SPSS.sav&quot;)</span></span>
-<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co"># mapa_minvu &lt;- st_read(&quot;CECYT_DEFICIT_HABIT_2023_WM.shp&quot;)</span></span>
-<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a><span class="co"># 2. Ingeniería de Datos: Estandarización de Llave Maestra (CUT)</span></span>
-<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a><span class="co"># Convertimos el código comunal a texto de 5 dígitos (ej: &quot;13101&quot;) en ambas bases.</span></span>
-<span id="cb1-14"><a href="#cb1-14" tabindex="-1"></a><span class="co"># Esto soluciona el problema de incompatibilidad de formatos.</span></span>
-<span id="cb1-15"><a href="#cb1-15" tabindex="-1"></a>casen_prep <span class="ot">&lt;-</span> casen_raw <span class="sc">%&gt;%</span></span>
-<span id="cb1-16"><a href="#cb1-16" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb1-17"><a href="#cb1-17" tabindex="-1"></a>    <span class="at">codigo_cruce =</span> <span class="fu">str_pad</span>(<span class="fu">as.character</span>(comuna), <span class="at">width =</span> <span class="dv">5</span>, <span class="at">side =</span> <span class="st">&quot;left&quot;</span>, <span class="at">pad =</span> <span class="st">&quot;0&quot;</span>)</span>
-<span id="cb1-18"><a href="#cb1-18" tabindex="-1"></a>  )</span>
-<span id="cb1-19"><a href="#cb1-19" tabindex="-1"></a></span>
-<span id="cb1-20"><a href="#cb1-20" tabindex="-1"></a>mapa_prep <span class="ot">&lt;-</span> mapa_minvu <span class="sc">%&gt;%</span></span>
-<span id="cb1-21"><a href="#cb1-21" tabindex="-1"></a>  <span class="fu">st_drop_geometry</span>() <span class="sc">%&gt;%</span> <span class="co"># Convertimos el mapa a tabla de datos</span></span>
-<span id="cb1-22"><a href="#cb1-22" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb1-23"><a href="#cb1-23" tabindex="-1"></a>    <span class="at">codigo_cruce =</span> <span class="fu">str_pad</span>(<span class="fu">as.character</span>(COMUNA), <span class="at">width =</span> <span class="dv">5</span>, <span class="at">side =</span> <span class="st">&quot;left&quot;</span>, <span class="at">pad =</span> <span class="st">&quot;0&quot;</span>)</span>
-<span id="cb1-24"><a href="#cb1-24" tabindex="-1"></a>  )</span>
-<span id="cb1-25"><a href="#cb1-25" tabindex="-1"></a></span>
-<span id="cb1-26"><a href="#cb1-26" tabindex="-1"></a><span class="co"># 3. El Cruce (Merge)</span></span>
-<span id="cb1-27"><a href="#cb1-27" tabindex="-1"></a><span class="co"># Unimos los indicadores territoriales a cada hogar mediante la llave estandarizada.</span></span>
-<span id="cb1-28"><a href="#cb1-28" tabindex="-1"></a>dataset_integrado <span class="ot">&lt;-</span> <span class="fu">left_join</span>(casen_prep, mapa_prep, <span class="at">by =</span> <span class="st">&quot;codigo_cruce&quot;</span>)</span></code></pre></div>
+<div id="planteamiento-del-problema-y-justificación" class="section level2">
+<h2>1. Planteamiento del Problema y Justificación</h2>
+<p>La necesidad de implementar nuevas metodologías predictivas en el
+ámbito habitacional surge de tres limitaciones críticas identificadas en
+el sistema de medición tradicional, basándonos tanto en el análisis de
+la serie CASEN realizado por Larraín, Torres y Ketterer (2023) como en
+los reportes oficiales del Ministerio de Desarrollo Social y Familia
+(2023).</p>
+<div id="carácter-estático-y-reactivo-de-la-medición" class="section level3">
+<h3>1.1. Carácter Estático y Reactivo de la Medición</h3>
+<p>El sistema actual mide el déficit habitacional como una variable de
+<em>stock</em>, lo que genera una falsa sensación de estabilidad. Si
+bien la nueva metodología oficial ajusta el déficit a <strong>552.046
+viviendas</strong> para 2022, esta cifra agregada esconde dinámicas
+internas críticas:</p>
+<ul>
+<li><strong>El predominio del allegamiento:</strong> Los datos oficiales
+confirman que los hogares allegados se han consolidado como el
+componente más importante del déficit, representando más de
+<strong>277.000 casos</strong> en 2022 (MDSF, 2023).</li>
+<li><strong>La “ceguera” ante campamentos:</strong> Aunque los catastros
+del MINVU reportan un alza significativa de hogares en campamentos
+(llegando a 71.961 en 2022), el reporte oficial de CASEN reconoce
+explícitamente que <em>“su diseño muestral no tiene entre sus objetivos
+generar datos representativos para dicho grupo de la población”</em>
+(MDSF, 2023). Esto confirma que la herramienta principal (CASEN) es
+estructuralmente “reactiva” e insuficiente para monitorear la
+precariedad más extrema en tiempo real.</li>
+</ul>
 </div>
-<div id="construcción-de-la-variable-objetivo-target" class="section level2">
-<h2>2. Construcción de la Variable Objetivo (Target)</h2>
-<p>Definimos el <strong>Déficit Habitacional</strong> siguiendo los
-estándares del Ministerio.</p>
-<p><strong>Criterios de Clasificación:</strong> * <strong>Clase 2
-(Déficit):</strong> Hogares con Hacinamiento, Allegamiento o Vivienda
-Irrecuperable. * <strong>Clase 0 (Sano):</strong> Hogares sin estas
-carencias.</p>
+<div id="ceguera-espacial-la-divergencia-territorial" class="section level3">
+<h3>1.2. “Ceguera Espacial”: La Divergencia Territorial</h3>
+<p>Las metodologías tradicionales tienden a asumir una homogeneidad
+territorial, sufriendo de una “ceguera” ante la concentración geográfica
+de la crisis. El informe de Resultados Casen 2022 confirma que, aunque
+el déficit es numéricamente mayor en la RM, la <strong>intensidad del
+problema</strong> (prevalencia) está severamente concentrada en el
+norte:</p>
+<ul>
+<li><strong>Zona Norte (Crisis de Intensidad):</strong> Las regiones con
+mayor prevalencia de déficit respecto a su población son
+<strong>Tarapacá (14,3%)</strong>, <strong>Arica y Parinacota
+(13,5%)</strong> y <strong>Antofagasta (11,3%)</strong>. De hecho, Arica
+y Parinacota fue la única región que aumentó su déficit de manera
+estadísticamente significativa entre 2017 y 2022 (MDSF, 2023).</li>
+<li><strong>Zona Sur (Tendencia a la baja):</strong> En contraste,
+regiones como Coquimbo y Biobío mostraron las mayores reducciones del
+déficit en el mismo período.</li>
+</ul>
+<p>Esta disparidad, validada por los datos oficiales, justifica la
+necesidad de integrar variables territoriales (IDE MINVU) en el modelo,
+ya que un algoritmo “ciego” al territorio no puede explicar estas
+divergencias regionales extremas.</p>
+</div>
+<div id="falta-de-anticipación-la-variable-oculta-de-la-fragilidad" class="section level3">
+<h3>1.3. Falta de Anticipación: La Variable Oculta de la Fragilidad</h3>
+<p>Finalmente, los métodos actuales carecen de capacidad anticipatoria
+al ignorar la <strong>“Asequibilidad”</strong> o Fragilidad
+Habitacional. El reporte oficial define la asequibilidad como el
+porcentaje de hogares que gastan más del 30% de su ingreso en vivienda,
+un indicador que ha mostrado un deterioro alarmante:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Duplicación del Problema:</strong> El porcentaje de hogares
+con problemas de asequibilidad prácticamente se ha duplicado en la
+última década, pasando del 6,9% en 2011 al <strong>13,7% en
+2022</strong> (MDSF, 2023).</li>
+<li><strong>Volumen de Afectados:</strong> Esto se traduce en
+<strong>956.185 hogares</strong> a nivel nacional que hoy enfrentan una
+carga financiera crítica, una cifra que supera ampliamente al déficit
+cuantitativo físico (552.046).</li>
+</ol>
+<p>Este grupo constituye la “demanda oculta” del sistema. Al no
+incorporar esta variable de flujo financiero, los modelos tradicionales
+fallan en predecir qué hogares, hoy técnicamente “sanos”, caerán mañana
+en déficit material por incapacidad de pago (Larraín et al., 2023).</p>
+</div>
+</div>
+<div id="pregunta-de-investigación-y-variables-de-estudio" class="section level2">
+<h2>2. Pregunta de Investigación y Variables de Estudio</h2>
+<div id="pregunta-de-investigación" class="section level3">
+<h3>2.1. Pregunta de Investigación</h3>
+<p><em>“¿En qué medida un modelo de Inteligencia Artificial (Deep
+Learning), que integre los microdatos socioeconómicos del hogar (CASEN
+2022) con variables de presión territorial (IDE MINVU), permite
+clasificar correctamente a los hogares en situación de <strong>Déficit
+Habitacional Cuantitativo</strong> en comparación con los métodos
+tradicionales que ignoran el entorno?”</em></p>
+</div>
+<div id="operacionalización-de-la-variable-objetivo-target" class="section level3">
+<h3>2.2. Operacionalización de la Variable Objetivo (Target)</h3>
+<p>Para efectos del modelamiento predictivo, se define una única
+variable dependiente binaria (<code>CLASE</code>), construida a partir
+de las reglas de negocio del Ministerio de Desarrollo Social y Familia
+(MDSF, 2023).</p>
+<p>Un hogar es clasificado como <strong>Déficit (Clase 2)</strong> si
+presenta al menos una de las siguientes carencias materiales críticas
+detectadas en la encuesta CASEN:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Hacinamiento Medio o Crítico:</strong> Hogares que presentan
+2,5 o más personas por dormitorio de uso exclusivo.</li>
+<li><strong>Allegamiento Externo:</strong> Hogares que comparten la
+vivienda con un hogar principal. Según el último reporte oficial, este
+componente se ha consolidado como el mayoritario dentro del déficit
+cuantitativo (MDSF, 2023).</li>
+<li><strong>Vivienda Irrecuperable:</strong> Viviendas cuya materialidad
+en pisos, techos o muros es considerada deficitaria según el Índice de
+Calidad Global de la Vivienda (MDSF, 2023).</li>
+</ol>
+<blockquote>
+<p><strong>Nota Metodológica:</strong> En el script de procesamiento,
+todos los hogares que no cumplen con ninguna de estas tres condiciones
+son etiquetados como <strong>“Sanos” (Clase 0)</strong>.</p>
+</blockquote>
+</div>
+<div id="variables-predictoras-inputs" class="section level3">
+<h3>2.3. Variables Predictoras (Inputs)</h3>
+<p>El modelo busca predecir esta clasificación utilizando dos niveles de
+información: * <strong>Nivel Micro (Hogar):</strong> Variables de la
+encuesta CASEN como ingreso autónomo, escolaridad, tamaño del hogar y
+jefatura femenina o inmigrante. * <strong>Nivel Macro
+(Territorial):</strong> Variables de la IDE MINVU (Déficit comunal y
+zonas de saturación) para incorporar el factor “espacial” al riesgo de
+precariedad.</p>
+</div>
+</div>
+<div id="objetivos-del-proyecto" class="section level2">
+<h2>3. Objetivos del Proyecto</h2>
+<div id="objetivo-general" class="section level3">
+<h3>3.1. Objetivo General</h3>
+<p>Desarrollar un modelo predictivo basado en Inteligencia Artificial
+(Redes Neuronales) que permita identificar y clasificar hogares en
+riesgo de <strong>Déficit Habitacional Cuantitativo</strong> y
+<strong>Fragilidad Habitacional</strong>, integrando variables
+socioeconómicas individuales (CASEN) con indicadores de presión
+territorial (MINVU) para superar las limitaciones de “ceguera espacial”
+de las mediciones actuales.</p>
+</div>
+<div id="objetivos-específicos" class="section level3">
+<h3>3.2. Objetivos Específicos</h3>
+<ol style="list-style-type: decimal">
+<li><p><strong>Integración Multidimensional de Datos (ETL):</strong>
+Construir un dataset consolidado que homologue la información
+micro-social de la Encuesta CASEN 2022 con los datos geoespaciales de la
+IDE MINVU, resolviendo la incompatibilidad de formatos territoriales
+para enriquecer la caracterización del entorno de cada hogar.</p></li>
+<li><p><strong>Entrenamiento y Balanceo del Modelo:</strong> Entrenar un
+algoritmo de <em>Deep Learning</em> (Perceptrón Multicapa) capaz de
+detectar patrones no lineales de vulnerabilidad. Se implementarán
+técnicas de <em>Up-Sampling</em> para corregir el desbalance de clases
+inherente al problema, asegurando que el modelo aprenda a identificar
+correctamente a la minoría afectada (hogares en déficit) y no solo a la
+mayoría sana.</p></li>
+<li><p><strong>Detección de Nuevos Perfiles de Riesgo:</strong> Evaluar
+la capacidad del modelo para identificar la “Demanda Oculta” o
+Fragilidad Habitacional, determinando qué peso tienen las nuevas
+variables demográficas (como la jefatura inmigrante o los hogares
+unipersonales) y las variables territoriales en la probabilidad de caer
+en precariedad habitacional.</p></li>
+</ol>
+</div>
+</div>
+<div id="metodología-ingeniería-de-datos" class="section level2">
+<h2>4. Metodología: Ingeniería de Datos</h2>
+<p>Para entrenar el modelo predictivo, se implementó un flujo de trabajo
+de tres etapas diseñado para asegurar la calidad estadística de la
+muestra y la correcta integración de las variables territoriales.</p>
+<div id="integración-de-fuentes-data-merging" class="section level3">
+<h3>4.1. Integración de Fuentes (Data Merging)</h3>
+<p>El primer desafío técnico fue enriquecer la caracterización
+socioeconómica (CASEN) con la realidad territorial (MINVU). Dado que
+ambas fuentes utilizan formatos distintos para los códigos comunales
+(números vs. texto), se estandarizaron las llaves primarias mediante el
+Código Único Territorial (CUT).</p>
+</div>
+</div>
+<div id="metodología" class="section level2">
+<h2>4. Metodología</h2>
+<p>Para entrenar el modelo predictivo, se implementó un flujo de trabajo
+de tres etapas diseñado para asegurar la calidad estadística de la
+muestra y la correcta integración de las variables territoriales.</p>
+<div id="integración-de-fuentes-data-merging-1" class="section level3">
+<h3>4.1. Integración de Fuentes (Data Merging)</h3>
+<p>El primer desafío técnico fue enriquecer la caracterización
+socioeconómica (CASEN) con la realidad territorial (MINVU). Dado que
+ambas fuentes utilizan formatos distintos para los códigos comunales
+(números vs. texto), se estandarizaron las llaves primarias mediante el
+Código Único Territorial (CUT).</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(stringr) <span class="co"># Para estandarización de texto</span></span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">library</span>(sf)      <span class="co"># Para manejo de datos espaciales</span></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="fu">library</span>(haven)   <span class="co"># Para leer SPSS</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co"># NOTA METODOLÓGICA:</span></span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co"># Este código se presenta para demostrar el proceso de integración realizado.</span></span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co"># Para efectos de esta presentación, cargaremos directamente la base consolidada.</span></span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co"># 1. Carga de fuentes originales</span></span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a><span class="co"># casen_raw &lt;- read_sav(&quot;Base de datos provincia y comuna Casen 2022 SPSS.sav&quot;)</span></span>
+<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a><span class="co"># mapa_minvu &lt;- st_read(&quot;CECYT_DEFICIT_HABIT_2023_WM.shp&quot;)</span></span>
+<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" tabindex="-1"></a><span class="co"># 2. Ingeniería de Datos: Estandarización de Llave Maestra (CUT)</span></span>
+<span id="cb1-15"><a href="#cb1-15" tabindex="-1"></a><span class="co"># casen_prep &lt;- casen_raw %&gt;%</span></span>
+<span id="cb1-16"><a href="#cb1-16" tabindex="-1"></a><span class="co">#   mutate(codigo_cruce = str_pad(as.character(comuna), width = 5, side = &quot;left&quot;, pad = &quot;0&quot;))</span></span>
+<span id="cb1-17"><a href="#cb1-17" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" tabindex="-1"></a><span class="co"># mapa_prep &lt;- mapa_minvu %&gt;%</span></span>
+<span id="cb1-19"><a href="#cb1-19" tabindex="-1"></a><span class="co">#   st_drop_geometry() %&gt;% </span></span>
+<span id="cb1-20"><a href="#cb1-20" tabindex="-1"></a><span class="co">#   mutate(codigo_cruce = str_pad(as.character(COMUNA), width = 5, side = &quot;left&quot;, pad = &quot;0&quot;))</span></span>
+<span id="cb1-21"><a href="#cb1-21" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" tabindex="-1"></a><span class="co"># 3. El Cruce (Merge)</span></span>
+<span id="cb1-23"><a href="#cb1-23" tabindex="-1"></a><span class="co"># dataset_integrado &lt;- left_join(casen_prep, mapa_prep, by = &quot;codigo_cruce&quot;)</span></span></code></pre></div>
+</div>
+<div id="construcción-de-la-variable-objetivo-target" class="section level3">
+<h3>4.2. Construcción de la Variable Objetivo (Target)</h3>
+<p>Se operacionalizó la variable dependiente <code>CLASE</code>
+siguiendo las reglas de negocio oficiales del Ministerio de Desarrollo
+Social (MDSF, 2023). Se etiquetó como <strong>“Déficit” (Clase
+2)</strong> a cualquier hogar que presente al menos una de las
+siguientes carencias graves: Hacinamiento, Allegamiento Externo o
+Vivienda Irrecuperable.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(haven) <span class="co"># Necesario para manejar etiquetas</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(haven)</span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a></span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co"># Carga de la base (simulación)</span></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="cf">if</span>(<span class="fu">file.exists</span>(<span class="st">&quot;Base_Final_Tesis_Definitiva.rds&quot;</span>)) {</span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  df_raw <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;Base_Final_Tesis_Definitiva.rds&quot;</span>)</span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>} <span class="cf">else</span> {</span>
-<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>  <span class="fu">stop</span>(<span class="st">&quot;Base de datos no encontrada.&quot;</span>)</span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>}</span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a></span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co"># OPERACIONALIZACIÓN DE LA VARIABLE DEPENDIENTE</span></span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co"># Paso previo: Limpieza de tipos de datos (Fix del error haven_labelled)</span></span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>df_etiquetado <span class="ot">&lt;-</span> df_raw <span class="sc">%&gt;%</span></span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>    <span class="co"># Convertimos las variables de SPSS a números puros para evitar errores</span></span>
-<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>    <span class="at">ind_hacina =</span> <span class="fu">as.numeric</span>(ind_hacina),</span>
-<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>    <span class="at">allega_ext =</span> <span class="fu">as.numeric</span>(allega_ext),</span>
-<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>    <span class="co"># Asegúrate de que ind_mat o la variable de materialidad exista. </span></span>
-<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>    <span class="co"># Si no existe, borra la línea siguiente y la condición en el case_when.</span></span>
-<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>    <span class="at">ind_mat =</span> <span class="cf">if</span>(<span class="st">&quot;ind_mat&quot;</span> <span class="sc">%in%</span> <span class="fu">names</span>(.)) <span class="fu">as.numeric</span>(ind_mat) <span class="cf">else</span> <span class="dv">0</span> </span>
-<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>    <span class="co"># Creación de la variable a predecir</span></span>
-<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>    <span class="at">CLASE =</span> <span class="fu">case_when</span>(</span>
-<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>      ind_hacina <span class="sc">&gt;=</span> <span class="dv">2</span> <span class="sc">~</span> <span class="dv">2</span>,        <span class="co"># Criterio 1: Hacinamiento Medio/Crítico</span></span>
-<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>      allega_ext <span class="sc">==</span> <span class="dv">1</span> <span class="sc">~</span> <span class="dv">2</span>,        <span class="co"># Criterio 2: Allegamiento Externo</span></span>
-<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>      ind_mat <span class="sc">==</span> <span class="dv">3</span> <span class="sc">~</span> <span class="dv">2</span>,           <span class="co"># Criterio 3: Materialidad Irrecuperable (si aplica)</span></span>
-<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="dv">0</span>                    <span class="co"># Resto: Hogares sin déficit cuantitativo</span></span>
-<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a>    )</span>
-<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a>  )</span>
-<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a></span>
-<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a><span class="fu">print</span>(<span class="st">&quot;Distribución de Clases Generada:&quot;</span>)</span></code></pre></div>
-<pre><code>## [1] &quot;Distribución de Clases Generada:&quot;</code></pre>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co"># --- CARGA OPTIMIZADA DE DATOS ---</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co"># Cargamos el archivo procesado (.rds) que ya se encuentra en el directorio.</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co"># Esto asegura que el reporte compile rápido sin procesar la base bruta nuevamente.</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="cf">if</span>(<span class="fu">file.exists</span>(<span class="st">&quot;Base_Tesis_Lista.rds&quot;</span>)) {</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>  df_raw <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;Base_Tesis_Lista.rds&quot;</span>)</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>} <span class="cf">else</span> <span class="cf">if</span>(<span class="fu">file.exists</span>(<span class="st">&quot;Base_Para_Entrenar_Red_Neuronal.rds&quot;</span>)) {</span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>  df_raw <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;Base_Para_Entrenar_Red_Neuronal.rds&quot;</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>}</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co"># OPERACIONALIZACIÓN DE LA VARIABLE DEPENDIENTE</span></span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co"># Aplicamos las reglas de clasificación sobre la base cargada</span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>df_etiquetado <span class="ot">&lt;-</span> df_raw <span class="sc">%&gt;%</span></span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>    <span class="co"># Aseguramos que las variables sean numéricas para evitar errores de cálculo</span></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>    <span class="at">ind_hacina =</span> <span class="fu">as.numeric</span>(ind_hacina),</span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>    <span class="at">allega_ext =</span> <span class="fu">as.numeric</span>(allega_ext),</span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>    <span class="co"># Si la variable materialidad no existe en la versión resumida, asumimos 0 (Sano)</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>    <span class="at">ind_mat =</span> <span class="cf">if</span>(<span class="st">&quot;ind_mat&quot;</span> <span class="sc">%in%</span> <span class="fu">names</span>(.)) <span class="fu">as.numeric</span>(ind_mat) <span class="cf">else</span> <span class="dv">0</span> </span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>    <span class="co"># Creación de la Etiqueta de Clase (Target)</span></span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>    <span class="at">CLASE =</span> <span class="fu">case_when</span>(</span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a>      ind_hacina <span class="sc">&gt;=</span> <span class="dv">2</span> <span class="sc">~</span> <span class="dv">2</span>,        <span class="co"># Criterio 1: Hacinamiento Medio (2.5+) o Crítico (5+)</span></span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a>      allega_ext <span class="sc">==</span> <span class="dv">1</span> <span class="sc">~</span> <span class="dv">2</span>,        <span class="co"># Criterio 2: Allegamiento Externo</span></span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a>      ind_mat <span class="sc">==</span> <span class="dv">3</span> <span class="sc">~</span> <span class="dv">2</span>,           <span class="co"># Criterio 3: Vivienda Irrecuperable (si aplica)</span></span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="dv">0</span>                    <span class="co"># Resto: Hogares &quot;Sanos&quot; (Clase 0)</span></span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a>    )</span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a>  )</span>
+<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a></span>
+<span id="cb2-35"><a href="#cb2-35" tabindex="-1"></a><span class="co"># Verificación de Resultados</span></span>
+<span id="cb2-36"><a href="#cb2-36" tabindex="-1"></a><span class="fu">print</span>(<span class="st">&quot;Distribución de Clases Generada (0=Sano, 2=Déficit):&quot;</span>)</span></code></pre></div>
+<pre><code>## [1] &quot;Distribución de Clases Generada (0=Sano, 2=Déficit):&quot;</code></pre>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">table</span>(df_etiquetado<span class="sc">$</span>CLASE)</span></code></pre></div>
 <pre><code>## 
 ##      0      2 
 ## 185942  16289</code></pre>
 </div>
-<div id="definición-de-la-unidad-de-análisis-y-selección-final" class="section level2">
-<h2>3. Definición de la Unidad de Análisis y Selección Final</h2>
+<div id="definición-de-la-unidad-de-análisis-y-selección-final" class="section level3">
+<h3>4.3. Definición de la Unidad de Análisis y Selección Final</h3>
 <p>La encuesta CASEN es una base de datos a nivel de individuos. Sin
 embargo, el déficit habitacional es un atributo del
-<strong>Hogar</strong>, no de la persona.</p>
-<p>Incluir a todos los integrantes (ej: padre, madre, hijos) duplicaría
-la información y generaría <strong>autocorrelación</strong>, sesgando el
-modelo. Por ello, aplicamos un filtro para mantener un solo registro
-representativo por folio.</p>
+<strong>Hogar</strong>. Incluir a todos los integrantes duplicaría la
+información y generaría autocorrelación.</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># 1. FILTRO DE UNIDAD DE ANÁLISIS</span></span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co"># Seleccionamos un solo representante por hogar (Jefe de Hogar) para evitar duplicidad.</span></span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>df_hogares <span class="ot">&lt;-</span> df_etiquetado <span class="sc">%&gt;%</span></span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="fu">distinct</span>(folio, <span class="at">.keep_all =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a></span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co"># 2. SELECCIÓN DE PREDICTORES (Feature Selection)</span></span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co"># Conservamos solo las variables teóricamente relevantes para el modelamiento.</span></span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>df_final_modelo <span class="ot">&lt;-</span> df_hogares <span class="sc">%&gt;%</span></span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>  <span class="fu">select</span>(</span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>    folio,</span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>    CLASE,                      <span class="co"># Variable Dependiente (Target)</span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>    yautcor,                    <span class="co"># Ingreso Autónomo</span></span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>    tot_per_h,                  <span class="co"># Tamaño del Hogar</span></span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>    esc,                        <span class="co"># Escolaridad</span></span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>    edad,                       <span class="co"># Edad</span></span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a>    sexo,                       <span class="co"># Sexo</span></span>
-<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a>    deficit_cuantitativo_total, <span class="co"># Variable Territorial (MINVU)</span></span>
-<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a>    ind_hacina                  <span class="co"># Variable Habitacional (Control)</span></span>
-<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a>  <span class="fu">na.omit</span>() <span class="co"># Eliminamos registros incompletos para asegurar calidad de datos</span></span>
-<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a></span>
-<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co"># 3. EXPORTACIÓN DEL DATASET CONSOLIDADO</span></span>
-<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a><span class="co"># Guardamos este archivo limpio. Este será el &quot;Input&quot; para el script de la Red Neuronal.</span></span>
-<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a><span class="co"># saveRDS(df_final_modelo, &quot;Input_Para_Red_Neuronal.rds&quot;)</span></span>
-<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a></span>
-<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a><span class="co"># Reporte Final</span></span>
-<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">paste</span>(<span class="st">&quot;Muestra original (Individuos):&quot;</span>, <span class="fu">nrow</span>(df_etiquetado)))</span></code></pre></div>
-<pre><code>## [1] &quot;Muestra original (Individuos): 202231&quot;</code></pre>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">paste</span>(<span class="st">&quot;Muestra final para modelo (Hogares):&quot;</span>, <span class="fu">nrow</span>(df_final_modelo)))</span></code></pre></div>
-<pre><code>## [1] &quot;Muestra final para modelo (Hogares): 56346&quot;</code></pre>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">head</span>(df_final_modelo)</span></code></pre></div>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co"># Seleccionamos un solo representante por hogar (Jefe de Hogar / Folio Único)</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co"># Nota: &#39;df_etiquetado&#39; viene del bloque anterior (4.2)</span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>df_hogares <span class="ot">&lt;-</span> df_etiquetado <span class="sc">%&gt;%</span></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="fu">distinct</span>(folio, <span class="at">.keep_all =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co"># 2. SELECCIÓN DE PREDICTORES (Feature Selection)</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co"># Definimos las variables que entrarán al modelo</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>vars_posibles <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;folio&quot;</span>, <span class="st">&quot;CLASE&quot;</span>, <span class="st">&quot;yautcor&quot;</span>, <span class="st">&quot;tot_per_h&quot;</span>, <span class="st">&quot;esc&quot;</span>, <span class="st">&quot;edad&quot;</span>, <span class="st">&quot;sexo&quot;</span>, </span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>                   <span class="st">&quot;deficit_cuantitativo_total&quot;</span>, <span class="st">&quot;ind_hacina&quot;</span>)</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co"># Creamos la tabla final &#39;df_final_modelo&#39; (ESTA ES LA QUE PIDE EL BLOQUE 5)</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>df_final_modelo <span class="ot">&lt;-</span> df_hogares <span class="sc">%&gt;%</span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>  <span class="fu">select</span>(<span class="fu">any_of</span>(vars_posibles)) <span class="sc">%&gt;%</span> </span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>  <span class="fu">na.omit</span>() <span class="co"># Eliminamos datos vacíos</span></span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co"># Verificación</span></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">paste</span>(<span class="st">&quot;Hogares finales para el modelo:&quot;</span>, <span class="fu">nrow</span>(df_final_modelo)))</span></code></pre></div>
+<pre><code>## [1] &quot;Hogares finales para el modelo: 56346&quot;</code></pre>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">head</span>(df_final_modelo)</span></code></pre></div>
 <pre><code>## # A tibble: 6 × 9
 ##       folio CLASE yautcor tot_per_h   esc  edad sexo      deficit_cuantitativo…¹
 ##       &lt;dbl&gt; &lt;dbl&gt;   &lt;dbl&gt;     &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl+lbl&gt;                  &lt;dbl&gt;
@@ -1712,7 +1875,147 @@ representativo por folio.</p>
 ## 6 100090901     0  160000         1    10    68 2 [2. Mu…                     11
 ## # ℹ abbreviated name: ¹​deficit_cuantitativo_total
 ## # ℹ 1 more variable: ind_hacina &lt;dbl&gt;</code></pre>
-<p>`</p>
+</div>
+<div id="exploración-visual-de-la-variable-objetivo" class="section level3">
+<h3>4.4. Exploración Visual de la Variable Objetivo</h3>
+<p>Antes de proceder al modelamiento, es crucial diagnosticar el balance
+de clases. Visualizamos la distribución de la variable dependiente para
+confirmar la asimetría de la muestra.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co"># Generamos un gráfico de barras para evidenciar el desbalance</span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="fu">ggplot</span>(df_final_modelo, <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">as.factor</span>(CLASE), <span class="at">fill =</span> <span class="fu">as.factor</span>(CLASE))) <span class="sc">+</span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>  <span class="fu">geom_bar</span>(<span class="at">width =</span> <span class="fl">0.6</span>) <span class="sc">+</span> </span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>  <span class="co"># Definición de colores: Azul corporativo (Sano) y Rojo alerta (Déficit)</span></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">&quot;0&quot;</span> <span class="ot">=</span> <span class="st">&quot;#2E86C1&quot;</span>, <span class="st">&quot;2&quot;</span> <span class="ot">=</span> <span class="st">&quot;#E74C3C&quot;</span>), </span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>                    <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&quot;Sano (Clase 0)&quot;</span>, <span class="st">&quot;Déficit (Clase 2)&quot;</span>)) <span class="sc">+</span></span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;Distribución de Clases: Déficit Habitacional&quot;</span>,</span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="fu">paste</span>(<span class="st">&quot;Total de Hogares analizados:&quot;</span>, <span class="fu">nrow</span>(df_final_modelo)),</span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;Condición Habitacional&quot;</span>,</span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">&quot;Frecuencia (N° Hogares)&quot;</span>,</span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a>       <span class="at">fill =</span> <span class="st">&quot;Clasificación&quot;</span>) <span class="sc">+</span></span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a>  <span class="co"># Agregamos las etiquetas de datos sobre las barras</span></span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> <span class="fu">after_stat</span>(count)), <span class="at">stat =</span> <span class="st">&quot;count&quot;</span>, <span class="at">vjust =</span> <span class="sc">-</span><span class="fl">0.5</span>, <span class="at">fontface =</span> <span class="st">&quot;bold&quot;</span>) <span class="sc">+</span></span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span></span>
+<span id="cb10-17"><a href="#cb10-17" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">plot.title =</span> <span class="fu">element_text</span>(<span class="at">face =</span> <span class="st">&quot;bold&quot;</span>, <span class="at">size =</span> <span class="dv">14</span>))</span></code></pre></div>
+<p><img role="img" aria-label src="data:image/png;base64,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" alt width="672" /></p>
+</div>
+</div>
+<div id="análisis-descriptivo-de-los-perfiles-de-riesgo" class="section level2">
+<h2>5. Análisis Descriptivo de los Perfiles de Riesgo</h2>
+<p>Una vez consolidada la base de datos, caracterizamos los hogares para
+validar si los datos respaldan las hipótesis de vulnerabilidad.</p>
+<div id="tabla-resumen-comparativa" class="section level3">
+<h3>5.1. Tabla Resumen Comparativa</h3>
+<p>Se comparan las variables clave entre hogares “Sanos” y con “Déficit”
+para identificar brechas estructurales.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="fu">library</span>(knitr)</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="co"># 1. Creación de la Tabla Resumen</span></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>tabla_resumen <span class="ot">&lt;-</span> df_final_modelo <span class="sc">%&gt;%</span></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>  <span class="fu">group_by</span>(CLASE) <span class="sc">%&gt;%</span></span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>    <span class="at">N =</span> <span class="fu">n</span>(),</span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a>    <span class="co"># Calculamos promedios</span></span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a>    <span class="at">Ingreso =</span> <span class="fu">mean</span>(yautcor, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a>    <span class="at">Personas =</span> <span class="fu">mean</span>(tot_per_h, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a>    <span class="at">Escolaridad =</span> <span class="fu">mean</span>(esc, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a>    <span class="at">Edad =</span> <span class="fu">mean</span>(edad, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a>    </span>
+<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a>    Condición <span class="ot">=</span> <span class="fu">ifelse</span>(CLASE <span class="sc">==</span> <span class="dv">2</span>, <span class="st">&quot;HOGAR EN DÉFICIT&quot;</span>, <span class="st">&quot;HOGAR SANO&quot;</span>),</span>
+<span id="cb11-18"><a href="#cb11-18" tabindex="-1"></a>    </span>
+<span id="cb11-19"><a href="#cb11-19" tabindex="-1"></a>    <span class="at">Ingreso =</span> <span class="fu">paste0</span>(<span class="st">&quot;$&quot;</span>, <span class="fu">format</span>(<span class="fu">round</span>(Ingreso, <span class="dv">0</span>), <span class="at">big.mark=</span><span class="st">&quot;.&quot;</span>)),</span>
+<span id="cb11-20"><a href="#cb11-20" tabindex="-1"></a>    <span class="at">Personas =</span> <span class="fu">round</span>(Personas, <span class="dv">1</span>), <span class="co"># 1 decimal para promedio de personas</span></span>
+<span id="cb11-21"><a href="#cb11-21" tabindex="-1"></a>    <span class="at">Escolaridad =</span> <span class="fu">round</span>(Escolaridad, <span class="dv">1</span>),</span>
+<span id="cb11-22"><a href="#cb11-22" tabindex="-1"></a>    <span class="at">Edad =</span> <span class="fu">round</span>(Edad, <span class="dv">0</span>)</span>
+<span id="cb11-23"><a href="#cb11-23" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb11-24"><a href="#cb11-24" tabindex="-1"></a>  <span class="co"># Seleccionamos y ordenamos columnas con nombres limpios</span></span>
+<span id="cb11-25"><a href="#cb11-25" tabindex="-1"></a>  <span class="fu">select</span>(Condición, N, Ingreso, Personas, Escolaridad, Edad)</span>
+<span id="cb11-26"><a href="#cb11-26" tabindex="-1"></a></span>
+<span id="cb11-27"><a href="#cb11-27" tabindex="-1"></a><span class="co"># 2. Impresión de Tabla Estilizada</span></span>
+<span id="cb11-28"><a href="#cb11-28" tabindex="-1"></a><span class="fu">kable</span>(tabla_resumen, </span>
+<span id="cb11-29"><a href="#cb11-29" tabindex="-1"></a>      <span class="at">caption =</span> <span class="st">&quot;Tabla 1: Perfil Socioeconómico Comparado&quot;</span>,</span>
+<span id="cb11-30"><a href="#cb11-30" tabindex="-1"></a>      <span class="at">align =</span> <span class="st">&quot;c&quot;</span>, <span class="co"># Centrar todas las columnas</span></span>
+<span id="cb11-31"><a href="#cb11-31" tabindex="-1"></a>      <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">&quot;Condición&quot;</span>, <span class="st">&quot;Cant. Hogares&quot;</span>, <span class="st">&quot;Ingreso Promedio&quot;</span>, <span class="st">&quot;Tam. Hogar&quot;</span>, <span class="st">&quot;Escolaridad&quot;</span>, <span class="st">&quot;Edad Jefe&quot;</span>))</span></code></pre></div>
+<table>
+<caption>Tabla 1: Perfil Socioeconómico Comparado</caption>
+<colgroup>
+<col width="20%" />
+<col width="17%" />
+<col width="20%" />
+<col width="13%" />
+<col width="14%" />
+<col width="12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Condición</th>
+<th align="center">Cant. Hogares</th>
+<th align="center">Ingreso Promedio</th>
+<th align="center">Tam. Hogar</th>
+<th align="center">Escolaridad</th>
+<th align="center">Edad Jefe</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">HOGAR SANO</td>
+<td align="center">53023</td>
+<td align="center">$685.835</td>
+<td align="center">2.7</td>
+<td align="center">11.4</td>
+<td align="center">53</td>
+</tr>
+<tr class="even">
+<td align="center">HOGAR EN DÉFICIT</td>
+<td align="center">3323</td>
+<td align="center">$503.549</td>
+<td align="center">3.5</td>
+<td align="center">11.0</td>
+<td align="center">46</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="visualización-de-la-brecha-de-ingresos" class="section level3">
+<h3>5.2. Visualización de la Brecha de Ingresos</h3>
+<p>El siguiente gráfico ilustra la distribución del ingreso autónomo
+entre ambos grupos. Se observa que la mediana de ingresos en hogares con
+déficit es inferior, aunque la existencia de traslape entre las cajas
+sugiere que el ingreso por sí solo no explica la totalidad del problema,
+validando la necesidad de un enfoque multidimensional.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co"># Gráfico de Cajas (Boxplot) para comparar distribuciones</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="fu">ggplot</span>(df_final_modelo, <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">as.factor</span>(CLASE), <span class="at">y =</span> yautcor, <span class="at">fill =</span> <span class="fu">as.factor</span>(CLASE))) <span class="sc">+</span></span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">outlier.shape =</span> <span class="cn">NA</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>) <span class="sc">+</span> <span class="co"># Ocultamos outliers extremos para limpiar la vista</span></span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  </span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>  <span class="co"># Zoom al eje Y: Cortamos en $1.5M para ver mejor el grueso de la población</span></span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  <span class="co"># (Sin este corte, los sueldos millonarios aplastan el gráfico)</span></span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>  <span class="fu">coord_cartesian</span>(<span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1500000</span>)) <span class="sc">+</span></span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a>  </span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a>  <span class="co"># Formato de dinero en el eje Y</span></span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">labels =</span> scales<span class="sc">::</span><span class="fu">dollar_format</span>(<span class="at">prefix=</span><span class="st">&quot;$&quot;</span>, <span class="at">big.mark =</span> <span class="st">&quot;.&quot;</span>)) <span class="sc">+</span></span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a>  </span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a>  <span class="co"># Colores corporativos: Azul (Sano) vs Rojo (Déficit)</span></span>
+<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">&quot;#2E86C1&quot;</span>, <span class="st">&quot;#E74C3C&quot;</span>), </span>
+<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a>                    <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&quot;Hogar Sano&quot;</span>, <span class="st">&quot;En Déficit&quot;</span>)) <span class="sc">+</span></span>
+<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a>  </span>
+<span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a>  <span class="co"># Etiquetas profesionales</span></span>
+<span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;Brecha de Ingresos por Condición Habitacional&quot;</span>,</span>
+<span id="cb12-20"><a href="#cb12-20" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="st">&quot;Comparación de Ingreso Autónomo del Hogar (Zoom: 0 - $1.5M)&quot;</span>,</span>
+<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;Condición del Hogar&quot;</span>,</span>
+<span id="cb12-22"><a href="#cb12-22" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">&quot;Ingreso Autónomo Mensual ($)&quot;</span>,</span>
+<span id="cb12-23"><a href="#cb12-23" tabindex="-1"></a>       <span class="at">fill =</span> <span class="st">&quot;Clasificación&quot;</span>) <span class="sc">+</span></span>
+<span id="cb12-24"><a href="#cb12-24" tabindex="-1"></a>  </span>
+<span id="cb12-25"><a href="#cb12-25" tabindex="-1"></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span></span>
+<span id="cb12-26"><a href="#cb12-26" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">&quot;top&quot;</span>,</span>
+<span id="cb12-27"><a href="#cb12-27" tabindex="-1"></a>        <span class="at">plot.title =</span> <span class="fu">element_text</span>(<span class="at">face =</span> <span class="st">&quot;bold&quot;</span>, <span class="at">size =</span> <span class="dv">14</span>))</span></code></pre></div>
+<p><img role="img" aria-label src="data:image/png;base64,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" alt width="768" /></p>
+</div>
 </div>
 
 
